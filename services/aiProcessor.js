@@ -83,6 +83,117 @@ class AIProcessor {
       document.complianceRecommendations = complianceResult.recommendations || [];
       document.complianceMetadata = complianceResult.metadata;
 
+      // Step 3: Generate HS Code suggestions
+      console.log('Step 3: Generating HS code suggestions...');
+      let hsCodeResult = null;
+      
+      // Extract products from structured data for HS code suggestions
+      if (ocrResult.structuredData && ocrResult.structuredData.items) {
+        const products = ocrResult.structuredData.items.map(item => item.description).filter(Boolean);
+        
+        if (products.length > 0) {
+          try {
+            // Generate HS codes for each product
+            const hsCodePromises = products.map(product => 
+              this.complianceService.suggestHSCodes(product, `From ${document.documentType} document`)
+            );
+            
+            const hsCodeResults = await Promise.all(hsCodePromises);
+            
+            // Combine all suggestions
+            const allSuggestions = hsCodeResults
+              .filter(result => result.success && result.suggestions)
+              .flatMap(result => result.suggestions);
+            
+            hsCodeResult = {
+              success: true,
+              suggestions: allSuggestions,
+              metadata: {
+                provider: 'claude-3-haiku',
+                processingTime: Date.now(),
+                productsAnalyzed: products.length
+              }
+            };
+          } catch (error) {
+            console.warn('⚠️  HS code generation failed, using fallback...', error.message);
+            hsCodeResult = this.complianceService.getFallbackHSCodes('Document products', 'Export');
+          }
+        }
+      }
+      
+      // If no structured data, try to extract from raw text
+      if (!hsCodeResult && ocrResult.extractedText) {
+        try {
+          hsCodeResult = await this.complianceService.suggestHSCodes(
+            ocrResult.extractedText.substring(0, 200), // Use first 200 chars
+            `From ${document.documentType} document`
+          );
+        } catch (error) {
+          console.warn('⚠️  HS code generation failed, using fallback...', error.message);
+          hsCodeResult = this.complianceService.getFallbackHSCodes('Document content', 'Export');
+        }
+      }
+      
+      // Update document with HS code results
+      if (hsCodeResult) {
+        document.hsCodeSuggestions = hsCodeResult.suggestions || [];
+        document.hsCodeMetadata = hsCodeResult.metadata;
+      }
+
+      // Step 4: Generate AI suggestions and corrections
+      console.log('Step 4: Generating AI suggestions...');
+      const aiSuggestions = {
+        documentImprovements: [],
+        complianceRecommendations: complianceResult.recommendations || [],
+        hsCodeRecommendations: hsCodeResult?.suggestions?.slice(0, 3) || [], // Top 3 HS codes
+        errorCorrections: complianceResult.corrections || [],
+        nextSteps: []
+      };
+
+      // Add document-specific suggestions
+      if (ocrResult.structuredData) {
+        if (!ocrResult.structuredData.invoiceNumber) {
+          aiSuggestions.documentImprovements.push({
+            type: 'missing_field',
+            field: 'invoiceNumber',
+            message: 'Invoice number is missing',
+            suggestion: 'Add a unique invoice number for better tracking'
+          });
+        }
+        
+        if (!ocrResult.structuredData.supplier?.taxId) {
+          aiSuggestions.documentImprovements.push({
+            type: 'missing_field',
+            field: 'supplierTaxId',
+            message: 'Supplier tax ID is missing',
+            suggestion: 'Include supplier tax ID for compliance'
+          });
+        }
+
+        if (ocrResult.structuredData.items) {
+          const itemsWithoutHSCodes = ocrResult.structuredData.items.filter(item => !item.hsCode);
+          if (itemsWithoutHSCodes.length > 0) {
+            aiSuggestions.documentImprovements.push({
+              type: 'missing_hs_codes',
+              field: 'items',
+              message: `${itemsWithoutHSCodes.length} items missing HS codes`,
+              suggestion: 'Add HS codes for all items to ensure proper classification'
+            });
+          }
+        }
+      }
+
+      // Add next steps
+      aiSuggestions.nextSteps = [
+        'Review compliance analysis results',
+        'Verify HS code suggestions are accurate',
+        'Update any missing required fields',
+        'Prepare document for customs clearance'
+      ];
+
+      // Update document with AI suggestions
+      document.aiSuggestions = aiSuggestions;
+
       // Calculate final processing results
       const endTime = Date.now();
       const processingTime = Math.round((endTime - startTime) / 1000); // in seconds
@@ -103,6 +214,19 @@ class AIProcessor {
           complianceScore: complianceResult.compliance?.score || 0,
           issuesFound: complianceResult.errors?.length || 0
         },
+        step3_hscodes: {
+          provider: hsCodeResult?.metadata?.provider || 'unknown',
+          success: hsCodeResult?.success || false,
+          suggestionsGenerated: hsCodeResult?.suggestions?.length || 0,
+          productsAnalyzed: hsCodeResult?.metadata?.productsAnalyzed || 0
+        },
+        step4_suggestions: {
+          provider: 'ai-analysis',
+          success: true,
+          improvementsSuggested: aiSuggestions.documentImprovements.length,
+          correctionsProvided: aiSuggestions.errorCorrections.length,
+          nextStepsProvided: aiSuggestions.nextSteps.length
+        },
         totalProcessingTime: processingTime,
         completedAt: new Date()
       };
@@ -118,6 +242,8 @@ class AIProcessor {
         results: {
           ocr: ocrResult,
           compliance: complianceResult,
+          hsCodes: hsCodeResult,
+          aiSuggestions: aiSuggestions,
           finalStatus: document.status,
           confidence: document.confidence
         },

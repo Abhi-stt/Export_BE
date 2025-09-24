@@ -85,8 +85,45 @@ router.post('/invoice', auth, async (req, res) => {
     }
 
     // Check if user has access to this document
-    if (req.user.role !== 'admin' && document.uploadedBy?.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized' });
+    const documentOwnerId = document.uploadedBy?.toString();
+    const requestingUserId = req.user.id.toString();
+    
+    let hasAccess = false;
+    
+    if (req.user.role === 'admin') {
+      hasAccess = true;
+    } else if (documentOwnerId === requestingUserId) {
+      hasAccess = true;
+    } else if (req.user.role === 'forwarder') {
+      // Forwarders can validate documents if:
+      // 1. Document is assigned to them
+      // 2. Document is shared with them with validate permission
+      // 3. Document belongs to their client
+      const isAssignedToForwarder = document.assignedForwarder?.toString() === requestingUserId;
+      const isSharedWithForwarder = document.sharedWith?.some(share => 
+        share.user?.toString() === requestingUserId && 
+        share.permissions?.includes('validate')
+      );
+      const isClientDocument = document.client && req.user.clientId && 
+        document.client.toString() === req.user.clientId.toString();
+      
+      hasAccess = isAssignedToForwarder || isSharedWithForwarder || isClientDocument;
+    } else if (req.user.role === 'ca') {
+      // CAs can validate documents if:
+      // 1. Document is shared with them with validate permission
+      // 2. Document belongs to their client
+      const isSharedWithCA = document.sharedWith?.some(share => 
+        share.user?.toString() === requestingUserId && 
+        share.permissions?.includes('validate')
+      );
+      const isClientDocument = document.client && req.user.clientId && 
+        document.client.toString() === req.user.clientId.toString();
+      
+      hasAccess = isSharedWithCA || isClientDocument;
+    }
+    
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Not authorized to validate this document' });
     }
 
     // Check if document is completed
@@ -164,11 +201,65 @@ router.post('/boe', auth, async (req, res) => {
     }
 
     // Check if user has access to these documents
-    if (req.user.role !== 'admin') {
-      if (invoiceDocument.uploadedBy?.toString() !== req.user.id || 
-          boeDocument.uploadedBy?.toString() !== req.user.id) {
-        return res.status(403).json({ message: 'Not authorized' });
-      }
+    const invoiceOwnerId = invoiceDocument.uploadedBy?.toString();
+    const boeOwnerId = boeDocument.uploadedBy?.toString();
+    const requestingUserId = req.user.id.toString();
+    
+    let hasInvoiceAccess = false;
+    let hasBOEAccess = false;
+    
+    if (req.user.role === 'admin') {
+      hasInvoiceAccess = true;
+      hasBOEAccess = true;
+    } else if (invoiceOwnerId === requestingUserId && boeOwnerId === requestingUserId) {
+      hasInvoiceAccess = true;
+      hasBOEAccess = true;
+    } else if (req.user.role === 'forwarder') {
+      // Check invoice access
+      const isInvoiceAssignedToForwarder = invoiceDocument.assignedForwarder?.toString() === requestingUserId;
+      const isInvoiceSharedWithForwarder = invoiceDocument.sharedWith?.some(share => 
+        share.user?.toString() === requestingUserId && 
+        share.permissions?.includes('validate')
+      );
+      const isInvoiceClientDocument = invoiceDocument.client && req.user.clientId && 
+        invoiceDocument.client.toString() === req.user.clientId.toString();
+      
+      hasInvoiceAccess = isInvoiceAssignedToForwarder || isInvoiceSharedWithForwarder || isInvoiceClientDocument;
+      
+      // Check BOE access
+      const isBOEAssignedToForwarder = boeDocument.assignedForwarder?.toString() === requestingUserId;
+      const isBOESharedWithForwarder = boeDocument.sharedWith?.some(share => 
+        share.user?.toString() === requestingUserId && 
+        share.permissions?.includes('validate')
+      );
+      const isBOEClientDocument = boeDocument.client && req.user.clientId && 
+        boeDocument.client.toString() === req.user.clientId.toString();
+      
+      hasBOEAccess = isBOEAssignedToForwarder || isBOESharedWithForwarder || isBOEClientDocument;
+    } else if (req.user.role === 'ca') {
+      // Check invoice access
+      const isInvoiceSharedWithCA = invoiceDocument.sharedWith?.some(share => 
+        share.user?.toString() === requestingUserId && 
+        share.permissions?.includes('validate')
+      );
+      const isInvoiceClientDocument = invoiceDocument.client && req.user.clientId && 
+        invoiceDocument.client.toString() === req.user.clientId.toString();
+      
+      hasInvoiceAccess = isInvoiceSharedWithCA || isInvoiceClientDocument;
+      
+      // Check BOE access
+      const isBOESharedWithCA = boeDocument.sharedWith?.some(share => 
+        share.user?.toString() === requestingUserId && 
+        share.permissions?.includes('validate')
+      );
+      const isBOEClientDocument = boeDocument.client && req.user.clientId && 
+        boeDocument.client.toString() === req.user.clientId.toString();
+      
+      hasBOEAccess = isBOESharedWithCA || isBOEClientDocument;
+    }
+    
+    if (!hasInvoiceAccess || !hasBOEAccess) {
+      return res.status(403).json({ message: 'Not authorized to validate these documents' });
     }
 
     // Check if documents are completed

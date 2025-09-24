@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'exporter', 'ca', 'forwarder'],
     default: 'exporter'
   },
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client'
+  },
   status: {
     type: String,
     enum: ['active', 'inactive', 'pending', 'suspended'],

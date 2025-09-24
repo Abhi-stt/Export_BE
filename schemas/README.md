@@ -159,7 +159,7 @@ const {
 
 ```javascript
 const mongoose = require('mongoose');
-const { User, Document } = require('./schemas');
+const { User, Document } = require('./schemas');3
 
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,

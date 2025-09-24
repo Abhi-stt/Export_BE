@@ -36,6 +36,42 @@ const documentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Client'
   },
+  // Forwarder access control
+  assignedForwarder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  sharedWith: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    role: {
+      type: String,
+      enum: ['forwarder', 'ca', 'admin']
+    },
+    sharedAt: {
+      type: Date,
+      default: Date.now
+    },
+    permissions: [{
+      type: String,
+      enum: ['view', 'validate', 'download', 'comment']
+    }]
+  }],
+  // Document validation status
+  validationStatus: {
+    type: String,
+    enum: ['pending', 'in_progress', 'validated', 'rejected', 'needs_review'],
+    default: 'pending'
+  },
+  validatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  validationNotes: {
+    type: String
+  },
   description: {
     type: String
   },
@@ -258,5 +294,9 @@ documentSchema.index({ uploadedBy: 1 });
 documentSchema.index({ documentType: 1 });
 documentSchema.index({ status: 1 });
 documentSchema.index({ createdAt: -1 });
+documentSchema.index({ client: 1 });
+documentSchema.index({ assignedForwarder: 1 });
+documentSchema.index({ validationStatus: 1 });
+documentSchema.index({ 'sharedWith.user': 1 });
 
 module.exports = mongoose.model('Document', documentSchema); 

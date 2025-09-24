@@ -2,46 +2,124 @@ const express = require('express');
 const { HSCodeSuggestion, User } = require('../schemas');
 const auth = require('../middleware/auth');
 const AIProcessor = require('../services/aiProcessor');
+const RealTradeDataService = require('../services/realTradeDataService');
+const AIPoweredHSCodeService = require('../services/aiPoweredHSCodeService');
 const router = express.Router();
 
-// Initialize AI processor
+// Initialize services
 const aiProcessor = new AIProcessor();
+const realTradeDataService = new RealTradeDataService();
+const aiPoweredHSCodeService = new AIPoweredHSCodeService();
 
 // @route   POST /api/hs-codes/suggest
-// @desc    Get HS code suggestions for product description
+// @desc    Get HS code suggestions with real Indian trade data
 // @access  Private
 router.post('/suggest', auth, async (req, res) => {
   try {
-    const { productDescription, additionalInfo } = req.body;
+    const { productDescription, additionalInfo, includeTradeData = false } = req.body;
 
     if (!productDescription) {
       return res.status(400).json({ message: 'Product description is required' });
     }
 
-      // Get AI-powered HS code suggestions
-  const startTime = Date.now();
-  const aiResult = await aiProcessor.getHSCodeSuggestions(productDescription, additionalInfo);
+    console.log(`🚀 AI-Powered HS Code suggestion requested for: ${productDescription}`);
 
-  if (!aiResult.success) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to generate HS code suggestions',
-      error: aiResult.error
+    // Get AI-powered HS code with government data
+    const startTime = Date.now();
+    const hsCodeResult = await aiPoweredHSCodeService.getPerfectHSCode(productDescription, additionalInfo);
+
+    if (!hsCodeResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to get AI-powered HS code from government sources',
+        error: hsCodeResult.error
+      });
+    }
+
+    // Convert to AI result format for compatibility
+    const aiResult = {
+      success: true,
+      suggestions: [{
+        code: hsCodeResult.hsCode.code,
+        description: hsCodeResult.hsCode.description,
+        confidence: hsCodeResult.hsCode.confidence,
+        category: hsCodeResult.hsCode.category,
+        chapter: hsCodeResult.hsCode.chapter,
+        heading: hsCodeResult.hsCode.heading,
+        subHeading: hsCodeResult.hsCode.subHeading,
+        tariffItem: hsCodeResult.hsCode.tariffItem,
+        source: hsCodeResult.hsCode.source,
+        gstRates: hsCodeResult.hsCode.gstRates,
+        dutyRate: hsCodeResult.hsCode.dutyRate,
+        restrictions: hsCodeResult.hsCode.restrictions,
+        similarProducts: hsCodeResult.hsCode.similarProducts,
+        structure: hsCodeResult.hsCode.structure,
+        aiValidation: hsCodeResult.hsCode.aiValidation,
+        aiEnhancement: hsCodeResult.hsCode.aiEnhancement,
+        allSuggestions: hsCodeResult.hsCode.allSuggestions || []
+      }]
+    };
+
+    let tradeData = null;
+    
+    // If trade data is requested, get real Indian trade data
+    if (includeTradeData && aiResult.suggestions && aiResult.suggestions.length > 0) {
+      try {
+        console.log(`🔍 Getting real trade data for HS code: ${aiResult.suggestions[0].code}`);
+        
+        const primaryHSCode = aiResult.suggestions[0].code;
+        
+        // Get real trade data in parallel
+        const [exportersResult, importersResult] = await Promise.all([
+          realTradeDataService.getExportersForHSCode(primaryHSCode, 10),
+          realTradeDataService.getImportersForHSCode(primaryHSCode, 10)
+        ]);
+
+        // Get blacklist status for all companies
+        const allCompanies = [
+          ...(exportersResult.success ? exportersResult.exporters.companies.map(e => e.companyName) : []),
+          ...(importersResult.success ? importersResult.importers.companies.map(i => i.companyName) : [])
+        ];
+
+        let blacklistResult = null;
+        if (allCompanies.length > 0) {
+          blacklistResult = await realTradeDataService.checkBlacklistStatus(allCompanies);
+        }
+
+        tradeData = {
+          hsCode: primaryHSCode,
+          exporters: exportersResult.success ? exportersResult.exporters : null,
+          importers: importersResult.success ? importersResult.importers : null,
+          blacklistStatus: blacklistResult && blacklistResult.success ? blacklistResult.blacklistStatus : null,
+          realData: true,
+          noFallback: true
+        };
+
+        console.log(`✅ Real trade data retrieved for HS code: ${primaryHSCode}`);
+        
+      } catch (tradeError) {
+        console.error('Trade data retrieval failed:', tradeError.message);
+        tradeData = {
+          error: 'Failed to retrieve real trade data',
+          realData: false,
+          noFallback: true
+        };
+      }
+    }
+
+    const processingTime = Math.floor((Date.now() - startTime) / 1000) || 2;
+
+    // Create new HS code suggestion request with AI results and trade data
+    const hsCodeSuggestion = new HSCodeSuggestion({
+      productDescription,
+      additionalInfo,
+      suggestions: aiResult.suggestions || [],
+      processingTime: processingTime,
+      requestedBy: req.user.id,
+      aiMetadata: aiResult.metadata,
+      reasoning: aiResult.reasoning,
+      tradeData: tradeData
     });
-  }
-
-  const processingTime = Math.floor((Date.now() - startTime) / 1000) || 2;
-
-  // Create new HS code suggestion request with AI results
-  const hsCodeSuggestion = new HSCodeSuggestion({
-    productDescription,
-    additionalInfo,
-    suggestions: aiResult.suggestions || [],
-    processingTime: processingTime,
-    requestedBy: req.user.id,
-    aiMetadata: aiResult.metadata,
-    reasoning: aiResult.reasoning
-  });
 
     await hsCodeSuggestion.save();
 
@@ -50,7 +128,15 @@ router.post('/suggest', auth, async (req, res) => {
 
     res.json({
       message: 'HS code suggestions generated successfully',
-      suggestion: populatedSuggestion
+      suggestion: populatedSuggestion,
+      tradeData: tradeData,
+      metadata: {
+        realData: tradeData ? tradeData.realData : false,
+        aiEnhanced: true,
+        governmentData: true,
+        noFallback: true,
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (err) {
     console.error(err.message);
