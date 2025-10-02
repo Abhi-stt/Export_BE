@@ -149,14 +149,23 @@ router.post('/login', async (req, res) => {
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
+    console.log('🔍 /auth/me called for user ID:', req.user.id);
     const user = await User.findById(req.user.id).select('-password');
+    console.log('🔍 User data from database:', {
+      id: user?._id,
+      name: user?.name,
+      email: user?.email,
+      role: user?.role,
+      designation: user?.designation
+    });
+    
     res.json({
       success: true,
       data: user,
       message: 'User retrieved successfully'
     });
   } catch (err) {
-    console.error(err.message);
+    console.error('❌ Error in /auth/me:', err.message);
     res.status(500).json({ 
       success: false,
       message: 'Server error',

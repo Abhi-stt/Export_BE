@@ -57,6 +57,34 @@ router.get('/', auth, admin, async (req, res) => {
   }
 });
 
+// @route   GET /api/users/me
+// @desc    Get current user profile
+// @access  Private
+router.get('/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: user,
+      message: 'User profile retrieved successfully'
+    });
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error',
+      error: err.message 
+    });
+  }
+});
+
 // @route   GET /api/users/:id
 // @desc    Get user by ID
 // @access  Private

@@ -1,0 +1,6 @@
+@echo off
+echo Stopping backend server...
+taskkill /F /IM node.exe
+timeout /t 2
+echo Starting backend server with fixes...
+node server.js

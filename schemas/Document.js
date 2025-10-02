@@ -19,7 +19,7 @@ const documentSchema = new mongoose.Schema({
   },
   documentType: {
     type: String,
-    enum: ['invoice', 'boe', 'packing_list', 'certificate', 'shipping_bill', 'other'],
+    enum: ['invoice', 'commercial_invoice', 'boe', 'packing_list', 'certificate', 'shipping_bill', 'other'],
     required: true
   },
   status: {
@@ -121,7 +121,7 @@ const documentSchema = new mongoose.Schema({
   entities: [{
     type: {
       type: String,
-      enum: ['company', 'person', 'date', 'amount', 'hs_code', 'product', 'location', 'invoice_number', 'boe_number', 'port', 'iec_code', 'document', 'email', 'phone']
+      enum: ['company', 'person', 'date', 'amount', 'hs_code', 'product', 'location', 'invoice_number', 'boe_number', 'port', 'iec_code', 'document', 'document_type', 'email', 'phone']
     },
     value: String,
     confidence: Number,

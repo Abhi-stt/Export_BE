@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'exporter', 'ca', 'forwarder'],
+    enum: ['admin', 'exporter', 'ca', 'forwarder', 'importer'],
     default: 'exporter'
   },
   clientId: {

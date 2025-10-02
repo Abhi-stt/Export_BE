@@ -203,19 +203,13 @@ router.get('/:id', (req, res, next) => {
 // @route   POST /api/documents/upload
 // @desc    Upload a new document
 // @access  Private (with test bypass)
-router.post('/upload', (req, res, next) => {
-  // For testing purposes, bypass auth if no token provided
-  if (!req.header('x-auth-token') && !req.header('Authorization')) {
-    console.log('⚠️  No auth token provided - using test mode');
-    req.user = {
-      id: 'test-user-id',
-      email: 'test@example.com',
-      role: 'user'
-    };
-  }
-  next();
-}, upload.single('document'), async (req, res) => {
+router.post('/upload', auth, upload.single('document'), async (req, res) => {
   try {
+    console.log('📄 Document Upload Started...');
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+    console.log('User:', req.user);
+
     const {
       documentType,
       description,
@@ -223,7 +217,13 @@ router.post('/upload', (req, res, next) => {
     } = req.body;
 
     if (!req.file) {
+      console.log('❌ No file uploaded');
       return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    if (!req.user || !req.user.id) {
+      console.log('❌ No authenticated user');
+      return res.status(401).json({ message: 'Authentication required' });
     }
 
     // Debug logging for upload
@@ -232,10 +232,13 @@ router.post('/upload', (req, res, next) => {
       uploadingUserRole: req.user.role,
       uploadingUserEmail: req.user.email,
       fileName: req.file.originalname,
-      documentType
+      fileSize: req.file.size,
+      documentType,
+      description
     });
 
     // Create new document
+    console.log('📝 Creating document record...');
     const document = new Document({
       fileName: req.file.filename,
       originalName: req.file.originalname,
@@ -249,9 +252,11 @@ router.post('/upload', (req, res, next) => {
       status: 'uploading'
     });
 
+    console.log('💾 Saving document to database...');
     await document.save();
     
-    console.log('✅ Document created with uploadedBy:', document.uploadedBy);
+    console.log('✅ Document created successfully with ID:', document._id);
+    console.log('✅ Document uploadedBy:', document.uploadedBy);
 
     // Process document with AI pipeline (Gemini + GPT-4/Claude)
     // Run in background to avoid blocking the response
@@ -273,8 +278,16 @@ router.post('/upload', (req, res, next) => {
       document: populatedDocument
     });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ Document upload error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name
+    });
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
   }
 });
 
@@ -425,6 +438,54 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ message: 'Document deleted successfully' });
   } catch (err) {
     console.error(err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/documents/:id/view
+// @desc    View document inline
+// @access  Private
+router.get('/:id/view', auth, async (req, res) => {
+  try {
+    const document = await Document.findById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    // Check if user has access to view this document
+    if (req.user.role === 'forwarder') {
+      // Forwarders can view if they have view access
+      const share = document.sharedWith.find(s => s.userId.toString() === req.user.id);
+      if (!share || !share.permissions?.includes('view')) {
+        return res.status(403).json({ message: 'Not authorized to view this document' });
+      }
+    } else if (req.user.role === 'exporter') {
+      // Exporters can view their own documents
+      if (document.uploadedBy.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to view this document' });
+      }
+    } else if (req.user.role === 'ca') {
+      // CA can view documents assigned to them
+      const share = document.sharedWith.find(s => s.userId.toString() === req.user.id);
+      if (!share || !share.permissions?.includes('view')) {
+        return res.status(403).json({ message: 'Not authorized to view this document' });
+      }
+    } else {
+      return res.status(403).json({ message: 'Not authorized to view this document' });
+    }
+
+    // Set appropriate headers for viewing
+    res.setHeader('Content-Type', document.fileType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${document.originalName}"`);
+    
+    // Stream the file
+    if (!fs.existsSync(document.filePath)) {
+      return res.status(404).json({ message: 'File not found on server' });
+    }
+
+    res.sendFile(path.resolve(document.filePath));
+  } catch (error) {
+    console.error('Error viewing document:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

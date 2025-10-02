@@ -1,0 +1,32 @@
+{
+  "watch": [
+    "server.js",
+    "routes/**/*.js",
+    "schemas/**/*.js",
+    "services/**/*.js",
+    "middleware/**/*.js",
+    "scripts/start.js"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "node_modules/**",
+    "uploads/**",
+    "*.test.js",
+    "test-*.js",
+    "debug-*.js",
+    "create-*.js",
+    "setup-*.js",
+    "check-*.js",
+    "fix-*.js",
+    "force-*.js"
+  ],
+  "delay": "1000",
+  "verbose": true,
+  "execMap": {
+    "js": "node"
+  },
+  "env": {
+    "NODE_ENV": "development"
+  }
+}
+

@@ -74,30 +74,6 @@ const seedData = async () => {
       console.log('✅ Test user created: user@export.com / user123');
     }
 
-    // Create CA user
-    const existingCA = await User.findOne({ email: 'ca@export.com' });
-    if (existingCA) {
-      console.log('ℹ️  CA user already exists');
-    } else {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash('ca123', salt);
-
-      const caUser = new User({
-        name: 'CA User',
-        email: 'ca@export.com',
-        password: hashedPassword,
-        phone: '+1234567892',
-        company: 'Customs Agent Co.',
-        role: 'ca',
-        status: 'active',
-        department: 'Customs',
-        designation: 'Customs Agent'
-      });
-
-      await caUser.save();
-      console.log('✅ CA user created: ca@export.com / ca123');
-    }
-
     // Create Forwarder user
     const existingForwarder = await User.findOne({ email: 'forwarder@export.com' });
     if (existingForwarder) {
@@ -126,7 +102,6 @@ const seedData = async () => {
     console.log('\n📋 Test Credentials:');
     console.log('Admin: admin@export.com / admin123');
     console.log('User: user@export.com / user123');
-    console.log('CA: ca@export.com / ca123');
     console.log('Forwarder: forwarder@export.com / forwarder123');
 
   } catch (error) {

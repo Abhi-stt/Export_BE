@@ -30,6 +30,15 @@ const realTradeDataRoutes = require('./routes/realTradeData');
 const analyticsRoutes = require('./routes/analytics');
 const adminRoutes = require('./routes/admin');
 const integrationRoutes = require('./routes/integrations');
+const shipmentOrderRoutes = require('./routes/shipment-orders');
+const notificationRoutes = require('./routes/notifications');
+const forwarderAssignmentRoutes = require('./routes/forwarder-assignments');
+const forwarderProfileRoutes = require('./routes/forwarder-profiles');
+const forwarderTaskRoutes = require('./routes/forwarderTasks');
+const importShipmentRoutes = require('./routes/import-shipments');
+const importDocumentRoutes = require('./routes/import-documents');
+const importSupplierRoutes = require('./routes/import-suppliers');
+const importCostRoutes = require('./routes/import-costs');
 
 // Middleware
 app.use(helmet());
@@ -38,10 +47,13 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Rate limiting - Increased limits for development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 500, // Increased from 100 to 500 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api/', limiter);
 
@@ -64,6 +76,15 @@ app.use('/api/real-trade', realTradeDataRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/integrations', integrationRoutes);
+app.use('/api/shipment-orders', shipmentOrderRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/forwarder-assignments', forwarderAssignmentRoutes);
+app.use('/api/forwarder-profiles', forwarderProfileRoutes);
+app.use('/api/forwarder', forwarderTaskRoutes);
+app.use('/api/import-shipments', importShipmentRoutes);
+app.use('/api/import-documents', importDocumentRoutes);
+app.use('/api/import-suppliers', importSupplierRoutes);
+app.use('/api/import-costs', importCostRoutes);
 
 // Health check endpoint with database test
 app.get('/api/health', async (req, res) => {

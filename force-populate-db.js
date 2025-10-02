@@ -51,10 +51,15 @@ async function forcePopulateDatabase() {
     const users = [];
     
     const userData = [
-      { name: 'Admin User', email: 'admin@export.com', password: 'admin123', role: 'admin', company: 'Export Admin Co.' },
-      { name: 'Exporter User', email: 'user@export.com', password: 'user123', role: 'exporter', company: 'ABC Exports Ltd' },
-      { name: 'CA User', email: 'ca@export.com', password: 'ca123', role: 'ca', company: 'CA Services Inc' },
-      { name: 'Forwarder User', email: 'forwarder@export.com', password: 'forwarder123', role: 'forwarder', company: 'Freight Forwarders LLC' }
+      { name: 'Admin User', email: 'admin@export.com', password: 'admin123', role: 'admin', company: 'Export Admin Co.', designation: 'System Administrator' },
+      { name: 'Exporter User', email: 'user@export.com', password: 'user123', role: 'exporter', company: 'ABC Exports Ltd', designation: 'Export Manager' },
+      { name: 'Forwarder Admin', email: 'forwarder@export.com', password: 'forwarder123', role: 'forwarder', company: 'Freight Forwarders LLC', designation: 'Forwarder Admin' },
+      { name: 'Pickup Forwarder', email: 'pickup@export.com', password: 'pickup123', role: 'forwarder', company: 'Freight Forwarders LLC', designation: 'Pickup Forwarder' },
+      { name: 'Transit Forwarder', email: 'transit@export.com', password: 'transit123', role: 'forwarder', company: 'Freight Forwarders LLC', designation: 'Transit Forwarder' },
+      { name: 'Port Loading Forwarder', email: 'portloading@export.com', password: 'port123', role: 'forwarder', company: 'Freight Forwarders LLC', designation: 'Port Loading Specialist' },
+      { name: 'Shipping Forwarder', email: 'shipping@export.com', password: 'ship123', role: 'forwarder', company: 'Freight Forwarders LLC', designation: 'Shipping Coordinator' },
+      { name: 'Delivery Forwarder', email: 'delivery@export.com', password: 'delivery123', role: 'forwarder', company: 'Freight Forwarders LLC', designation: 'Delivery Specialist' },
+      { name: 'Importer User', email: 'importer@export.com', password: 'importer123', role: 'importer', company: 'Import Solutions Inc', designation: 'Import Manager' }
     ];
 
     for (const user of userData) {
@@ -68,7 +73,7 @@ async function forcePopulateDatabase() {
         role: user.role,
         status: 'active',
         department: 'Operations',
-        designation: user.role === 'admin' ? 'Administrator' : 'User'
+        designation: user.designation || 'User'
       });
       
       await newUser.save();
@@ -304,11 +309,44 @@ async function forcePopulateDatabase() {
     }
 
     console.log('\n🎉 Database populated successfully!');
-    console.log('🔑 Test Login Credentials:');
-    console.log('- Admin: admin@export.com / admin123');
-    console.log('- Exporter: user@export.com / user123');
-    console.log('- CA: ca@export.com / ca123');
-    console.log('- Forwarder: forwarder@export.com / forwarder123');
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔑 TEST LOGIN CREDENTIALS:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    console.log('👤 ADMIN:');
+    console.log('   Email: admin@export.com');
+    console.log('   Password: admin123\n');
+    
+    console.log('📦 EXPORTER:');
+    console.log('   Email: user@export.com');
+    console.log('   Password: user123\n');
+    
+    console.log('🚛 FORWARDER ADMIN (Full Dashboard Access):');
+    console.log('   Email: forwarder@export.com');
+    console.log('   Password: forwarder123\n');
+    
+    console.log('🚚 SUB-FORWARDERS (My Tasks Dashboard):');
+    console.log('   1. Pickup Forwarder');
+    console.log('      Email: pickup@export.com');
+    console.log('      Password: pickup123');
+    console.log('   2. Transit Forwarder');
+    console.log('      Email: transit@export.com');
+    console.log('      Password: transit123');
+    console.log('   3. Port Loading Specialist');
+    console.log('      Email: portloading@export.com');
+    console.log('      Password: port123');
+    console.log('   4. Shipping Coordinator');
+    console.log('      Email: shipping@export.com');
+    console.log('      Password: ship123');
+    console.log('   5. Delivery Specialist');
+    console.log('      Email: delivery@export.com');
+    console.log('      Password: delivery123\n');
+    
+    console.log('📥 IMPORTER:');
+    console.log('   Email: importer@export.com');
+    console.log('   Password: importer123\n');
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   } catch (error) {
     console.error('❌ Database population failed:', error);

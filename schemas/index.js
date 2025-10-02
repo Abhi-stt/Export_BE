@@ -18,6 +18,12 @@ const AuditReport = require('./AuditReport');
 const UserSettings = require('./UserSettings');
 const Notification = require('./Notification');
 const ComplianceRule = require('./ComplianceRule');
+const ForwarderAssignment = require('./ForwarderAssignment');
+const ForwarderProfile = require('./ForwarderProfile');
+const ImportShipment = require('./ImportShipment');
+const ImportDocument = require('./ImportDocument');
+const ImportCost = require('./ImportCost');
+const ImportSupplier = require('./ImportSupplier');
 
 module.exports = {
   User,
@@ -38,5 +44,11 @@ module.exports = {
   AuditReport,
   UserSettings,
   Notification,
-  ComplianceRule
+  ComplianceRule,
+  ForwarderAssignment,
+  ForwarderProfile,
+  ImportShipment,
+  ImportDocument,
+  ImportCost,
+  ImportSupplier
 }; 
