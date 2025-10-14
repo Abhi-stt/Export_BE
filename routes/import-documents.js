@@ -6,40 +6,110 @@ const fs = require('fs');
 const ImportDocument = require('../schemas/ImportDocument');
 const ImportShipment = require('../schemas/ImportShipment');
 const auth = require('../middleware/auth');
-// Simple AI processing function for import documents
-const processDocumentWithAI = async (filePath, documentType) => {
+const GeminiService = require('../services/gemini');
+const ComplianceService = require('../services/compliance');
+
+// Initialize AI services
+const geminiService = new GeminiService();
+const complianceService = new ComplianceService();
+
+// Real AI processing function for import documents
+const processDocumentWithAI = async (filePath, documentType, mimeType) => {
   try {
-    // This is a simplified version - in production, you would use the full AI pipeline
-    // For now, return mock data to prevent errors
+    const startTime = Date.now();
+    
+    console.log(`🤖 Processing import document with AI: ${path.basename(filePath)}`);
+    
+    // Step 1: Extract text using Gemini
+    let ocrResult = await geminiService.extractTextFromDocument(
+      filePath,
+      mimeType,
+      documentType
+    );
+
+    // If OCR fails, use fallback
+    if (!ocrResult.success) {
+      console.warn('⚠️  OCR failed, using fallback processing...');
+      ocrResult = await geminiService.getFallbackProcessing(filePath, documentType);
+    }
+
+    // Step 2: Analyze compliance for import documents
+    let complianceResult = await complianceService.analyzeCompliance(
+      ocrResult.structuredData || { extractedText: ocrResult.extractedText },
+      documentType
+    );
+
+    // If compliance analysis fails, use fallback
+    if (!complianceResult.success) {
+      console.warn('⚠️  Compliance analysis failed, using fallback...');
+      complianceResult = await complianceService.getFallbackCompliance(
+        ocrResult.structuredData || { extractedText: ocrResult.extractedText },
+        documentType
+      );
+    }
+
+    // Step 3: Extract HS codes and get suggestions
+    const extractedData = ocrResult.structuredData || {};
+    let hsCodes = extractedData.items?.map(item => item.hsCode).filter(Boolean) || [];
+    
+    // If no HS codes found, try to suggest based on product descriptions
+    if (hsCodes.length === 0 && extractedData.items) {
+      const products = extractedData.items.map(item => item.description).filter(Boolean);
+      if (products.length > 0) {
+        try {
+          const hsCodeResult = await complianceService.suggestHSCodes(
+            products[0], // Use first product for suggestion
+            `From ${documentType} document`
+          );
+          if (hsCodeResult.success && hsCodeResult.suggestions) {
+            hsCodes = hsCodeResult.suggestions.map(s => s.code);
+          }
+        } catch (error) {
+          console.warn('HS code suggestion failed:', error.message);
+        }
+      }
+    }
+
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+
     return {
-      extractedText: "Mock extracted text from document",
+      extractedText: ocrResult.extractedText || '',
       extractedData: {
-        supplierName: "Sample Supplier",
-        supplierAddress: "123 Main St, City, Country",
-        importerName: "Sample Importer",
-        invoiceNumber: "INV-001",
-        invoiceDate: new Date(),
-        totalAmount: 1000,
-        currency: "USD",
-        hsCodes: ["1234.56.78"],
-        goodsDescription: "Sample goods description",
-        quantity: 10,
-        unit: "pcs",
-        unitPrice: 100,
-        totalPrice: 1000,
-        originCountry: "US",
-        destinationCountry: "IN",
-        portOfLoading: "New York",
-        portOfDischarge: "Mumbai"
+        supplierName: extractedData.supplier?.name || extractedData.from?.name || '',
+        supplierAddress: extractedData.supplier?.address || extractedData.from?.address || '',
+        importerName: extractedData.buyer?.name || extractedData.to?.name || '',
+        importerAddress: extractedData.buyer?.address || extractedData.to?.address || '',
+        invoiceNumber: extractedData.invoiceNumber || extractedData.documentNumber || '',
+        invoiceDate: extractedData.invoiceDate || extractedData.date || new Date(),
+        totalAmount: extractedData.totalAmount || extractedData.grandTotal || 0,
+        currency: extractedData.currency || 'USD',
+        hsCodes: hsCodes,
+        goodsDescription: extractedData.items?.[0]?.description || extractedData.goodsDescription || '',
+        quantity: extractedData.items?.[0]?.quantity || 0,
+        unit: extractedData.items?.[0]?.unit || 'pcs',
+        unitPrice: extractedData.items?.[0]?.unitPrice || 0,
+        totalPrice: extractedData.items?.[0]?.totalPrice || extractedData.totalAmount || 0,
+        originCountry: extractedData.origin?.country || extractedData.supplier?.country || '',
+        destinationCountry: extractedData.destination?.country || extractedData.buyer?.country || '',
+        portOfLoading: extractedData.origin?.port || extractedData.shipFrom?.port || '',
+        portOfDischarge: extractedData.destination?.port || extractedData.shipTo?.port || '',
+        vesselName: extractedData.vessel?.name || '',
+        voyageNumber: extractedData.vessel?.voyage || '',
+        containerNumber: extractedData.container?.number || '',
+        sealNumber: extractedData.container?.seal || '',
+        weight: extractedData.totalWeight || extractedData.weight || 0,
+        volume: extractedData.totalVolume || extractedData.volume || 0,
+        dimensions: extractedData.dimensions || {}
       },
-      confidence: 0.85,
-      processingTime: 1500,
-      provider: 'mock',
-      errors: [],
-      suggestions: []
+      confidence: ocrResult.confidence || 0,
+      processingTime: processingTime,
+      provider: 'gemini-openai-pipeline',
+      errors: complianceResult.errors || [],
+      suggestions: complianceResult.recommendations || []
     };
   } catch (error) {
-    console.error('AI processing error:', error);
+    console.error('❌ AI processing error:', error);
     throw error;
   }
 };
@@ -113,26 +183,46 @@ router.post('/upload', auth, upload.single('document'), async (req, res) => {
 
     await document.save();
 
-    // Process document with AI
-    try {
-      const aiResult = await processDocumentWithAI(req.file.path, documentType);
-      document.aiProcessing = {
-        status: 'completed',
-        extractedText: aiResult.extractedText,
-        extractedData: aiResult.extractedData,
-        confidence: aiResult.confidence,
-        processingTime: aiResult.processingTime,
-        aiProvider: aiResult.provider,
-        errors: aiResult.errors || [],
-        suggestions: aiResult.suggestions || []
-      };
-      await document.save();
-    } catch (aiError) {
-      console.error('AI processing error:', aiError);
-      document.aiProcessing.status = 'failed';
-      document.aiProcessing.errors = [aiError.message];
-      await document.save();
-    }
+    // Process document with AI in background
+    setImmediate(async () => {
+      try {
+        console.log(`🚀 Starting AI processing for: ${document.originalName}`);
+        document.aiProcessing.status = 'processing';
+        await document.save();
+        
+        const aiResult = await processDocumentWithAI(req.file.path, documentType, req.file.mimetype);
+        
+        document.aiProcessing = {
+          status: 'completed',
+          extractedText: aiResult.extractedText,
+          extractedData: aiResult.extractedData,
+          confidence: aiResult.confidence,
+          processingTime: aiResult.processingTime,
+          aiProvider: aiResult.provider,
+          errors: aiResult.errors || [],
+          suggestions: aiResult.suggestions || []
+        };
+        
+        // Auto-validate if confidence is high
+        if (aiResult.confidence > 0.8) {
+          document.validation.status = 'validated';
+          document.validation.complianceScore = Math.round(aiResult.confidence * 100);
+          document.validation.validatedAt = new Date();
+        } else {
+          document.validation.status = 'needs_review';
+        }
+        
+        document.status = 'validated';
+        await document.save();
+        console.log(`✅ AI processing completed for: ${document.originalName}`);
+      } catch (aiError) {
+        console.error('❌ AI processing error:', aiError);
+        document.aiProcessing.status = 'failed';
+        document.aiProcessing.errors = [aiError.message];
+        document.status = 'rejected';
+        await document.save();
+      }
+    });
 
     res.status(201).json(document);
   } catch (error) {
@@ -256,6 +346,39 @@ router.delete('/:id', auth, async (req, res) => {
     await ImportDocument.findByIdAndDelete(req.params.id);
 
     res.json({ message: 'Document deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all documents for the authenticated importer
+router.get('/', auth, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, documentType, status } = req.query;
+    const query = { importer: req.user.id };
+    
+    if (documentType) {
+      query.documentType = documentType;
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+
+    const documents = await ImportDocument.find(query)
+      .populate('importShipment', 'shipmentNumber supplier')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await ImportDocument.countDocuments(query);
+
+    res.json({
+      documents,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

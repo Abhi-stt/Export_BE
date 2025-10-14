@@ -181,7 +181,7 @@ const importShipmentSchema = new mongoose.Schema({
     },
     container: {
       number: String,
-      type: String,
+      type: { type: String },
       size: String
     },
     trackingNumber: String,
@@ -238,9 +238,32 @@ const importShipmentSchema = new mongoose.Schema({
       signature: String
     }
   },
+  // Forwarder Approval Workflow
+  approvalStatus: {
+    type: String,
+    enum: ['pending_approval', 'approved', 'rejected', 'none'],
+    default: 'pending_approval'
+  },
+  forwarderAdmin: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: {
+    type: Date
+  },
+  rejectedAt: {
+    type: Date
+  },
+  rejectionReason: {
+    type: String
+  },
   status: {
     type: String,
-    enum: ['draft', 'submitted', 'in_transit', 'at_port', 'customs_clearance', 'released', 'delivered', 'exception'],
+    enum: ['draft', 'pending_approval', 'approved', 'in_progress', 'in_transit', 'at_port', 'customs_clearance', 'released', 'delivered', 'exception', 'rejected'],
     default: 'draft'
   },
   totalValue: {
@@ -266,6 +289,8 @@ const importShipmentSchema = new mongoose.Schema({
 importShipmentSchema.index({ shipmentNumber: 1 });
 importShipmentSchema.index({ importer: 1 });
 importShipmentSchema.index({ status: 1 });
+importShipmentSchema.index({ approvalStatus: 1 });
+importShipmentSchema.index({ forwarderAdmin: 1 });
 importShipmentSchema.index({ 'origin.country': 1 });
 importShipmentSchema.index({ 'destination.country': 1 });
 importShipmentSchema.index({ createdAt: -1 });
